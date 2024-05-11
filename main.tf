@@ -9,7 +9,8 @@ terraform {
 
 resource "aws_instance" "windows" {
   ami = "ami-0f496107db66676ff"
-  instance_type = "t2.medium"
+  instance_type = "t2.micro"
+  count = 1
   # xlarge for later  
   # ami = "ami-0f9c44e98edf38a2b"
   # instance_type = "g4dn.xlarge"
@@ -32,7 +33,6 @@ resource "aws_vpc" "main" {
 }
 
 resource "aws_subnet" "public_subnets" {
-  depends_on = [ aws_vpc.main ]
   count = length(var.public_subnet_cidrs)
   vpc_id = aws_vpc.main.id
   cidr_block = element(var.public_subnet_cidrs, count.index)
@@ -44,8 +44,6 @@ resource "aws_subnet" "public_subnets" {
 }
 
 resource "aws_subnet" "private_subnets" {
-  depends_on = [ aws_vpc.main,
-  aws_subnet.public_subnets ]
   count = length(var.private_subnet_cidrs)
   vpc_id = aws_vpc.main.id
   cidr_block = element(var.private_subnet_cidrs, count.index)
@@ -55,9 +53,6 @@ resource "aws_subnet" "private_subnets" {
   }
 }
 resource "aws_internet_gateway" "gw" {
-  depends_on = [ aws_vpc.main,
-  aws_subnet.public_subnets,
-  aws_subnet.private_subnets ]
   vpc_id = aws_vpc.main.id
   tags = {
     Name = "Project VPC IG"
@@ -65,8 +60,6 @@ resource "aws_internet_gateway" "gw" {
 }
 
 resource "aws_route_table" "second_rt" {
-  depends_on = [ aws_vpc.main,
-  aws_internet_gateway.gw ]
   vpc_id = aws_vpc.main.id
   route{
     cidr_block = "0.0.0.0/0"
@@ -78,39 +71,38 @@ resource "aws_route_table" "second_rt" {
 }
 
 resource "aws_route_table_association" "public_subnet_asso" {
-  depends_on = [ 
-    aws_vpc.main,
-    aws_subnet.private_subnets,
-    aws_subnet.public_subnets,
-    aws_route_table.second_rt
-   ]
   count = length(var.public_subnet_cidrs)
   subnet_id = element(aws_subnet.public_subnets[*].id, count.index)
-  route_table_id = aws_route_table.second_rt.id
+  route_table_id = element(aws_route_table.second_rt.*.id, count.index)
 }
 
 resource "aws_eip" "nat_gateway_eip"{
+  domain = "vpc"
   tags = {
     name = "gateway_eip"
   }
 }
 
 resource "aws_nat_gateway" "nat_gateway"{
-  subnet_id = "aws_subnet.public_subnets"
-  allocation_id = "aws_eip.nat_gateway_eip"
+  subnet_id = aws_subnet.public_subnets[0].id
+  allocation_id = aws_eip.nat_gateway_eip.id
+  depends_on = [aws_internet_gateway.gw]
+  tags = {
+    name = "nat gateway"
+  }
 }
 
 resource "aws_route_table" "nat_gateway_rt" {
-  vpc_id = "aws_vpc.main"
+  vpc_id = aws_vpc.main.id
   route {
     cidr_block = "0.0.0.0/0"
-    nat_gateway_id = "aws_nat_gateway.nat_gateway"
+    gateway_id = aws_gateway.gw.id
   }
 }
 
 resource "aws_route_table_association" "nat_gateway_rt_association"{
-  subnet_id = "aws_subnet.private_subnets"
-  route_table_id = "aws_route_table.nat_gateway_rt"
+  subnet_id = aws_subnet.private_subnets[0].id
+  route_table_id = aws_route_table.nat_gateway_rt.id
 }
 
 resource "aws_security_group" "allow_web"{
