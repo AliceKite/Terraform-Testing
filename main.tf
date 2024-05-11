@@ -8,18 +8,15 @@ terraform {
 }
 
 resource "aws_instance" "windows" {
-  ami = "ami-0f496107db66676ff"
-  instance_type = "t2.micro"
-  count = 1
-  # xlarge for later  
-  # ami = "ami-0f9c44e98edf38a2b"
-  # instance_type = "g4dn.xlarge"
+  count = 0
+  ami = "ami-0f9c44e98edf38a2b"
+  instance_type = "g4dn.xlarge"
   associate_public_ip_address = true
   key_name = "terraform-key"
   subnet_id = aws_subnet.private_subnets[0].id
   vpc_security_group_ids = [aws_security_group.allow_web.id]
   tags = {
-    Name = "microTest"
+    Name = "Your Game Goes Here"
   }
 }
 
@@ -96,7 +93,7 @@ resource "aws_route_table" "nat_gateway_rt" {
   vpc_id = aws_vpc.main.id
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_gateway.gw.id
+    gateway_id = aws_internet_gateway.gw.id
   }
 }
 
@@ -125,5 +122,3 @@ resource "aws_security_group" "allow_web"{
     name = "allow_web"
   }
 }
-
-# https://repost.aws/knowledge-center/ec2-connect-internet-gateway
